@@ -50,4 +50,4 @@ COPY auto_checkin.py .
 COPY auto_daily_report.py .
 
 # 默认运行打卡脚本
-CMD ["python", "auto_checkin.py"]
+CMD python auto_checkin.py
