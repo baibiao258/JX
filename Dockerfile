@@ -49,5 +49,9 @@ RUN playwright install chromium && playwright install-deps chromium
 COPY auto_checkin.py .
 COPY auto_daily_report.py .
 
-# 默认运行打卡脚本
-CMD python auto_checkin.py
+# 复制启动脚本
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
+# 默认运行启动脚本
+CMD ["/app/entrypoint.sh"]
