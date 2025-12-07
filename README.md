@@ -2,16 +2,21 @@
 
 自动打卡和日报提交的 Docker 镜像项目。
 
-## 构建镜像
+## 自动构建 (GitHub Actions)
+
+推送代码到 main 分支后，GitHub Actions 会自动构建并推送镜像到 Docker Hub。
+
+### 配置 GitHub Secrets
+
+在仓库 Settings -> Secrets and variables -> Actions 中添加：
+
+- `DOCKERHUB_USERNAME` - Docker Hub 用户名
+- `DOCKERHUB_TOKEN` - Docker Hub Access Token
+
+### 手动构建
 
 ```bash
 docker build -t yourusername/daka4s:v1 .
-```
-
-## 推送到 Docker Hub
-
-```bash
-docker login
 docker push yourusername/daka4s:v1
 ```
 
