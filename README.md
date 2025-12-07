@@ -4,25 +4,13 @@
 
 ## 自动构建 (GitHub Actions)
 
-推送代码到 main 分支后，GitHub Actions 会自动构建并推送镜像到 Docker Hub。
+推送代码到 main 分支后，GitHub Actions 会自动构建并推送镜像到 GitHub Container Registry。
 
-### 配置 GitHub Secrets
-
-在仓库 Settings -> Secrets and variables -> Actions 中添加：
-
-- `DOCKERHUB_USERNAME` - Docker Hub 用户名
-- `DOCKERHUB_TOKEN` - Docker Hub Access Token
-
-### 手动构建
-
-```bash
-docker build -t yourusername/daka4s:v1 .
-docker push yourusername/daka4s:v1
-```
+无需额外配置，使用 GitHub 自带的 GITHUB_TOKEN 即可。
 
 ## 在 Leaflow 上部署
 
-镜像格式: `yourusername/daka4s:v1`
+镜像格式: `ghcr.io/baibiao258/jx:v1`
 
 ### 环境变量配置
 
@@ -48,5 +36,5 @@ docker push yourusername/daka4s:v1
 ## 本地测试
 
 ```bash
-docker run -e CHECKIN_USERNAME=你的用户名 -e CHECKIN_PASSWORD=你的密码 yourusername/daka4s:v1
+docker run -e CHECKIN_USERNAME=你的用户名 -e CHECKIN_PASSWORD=你的密码 ghcr.io/baibiao258/jx:v1
 ```
