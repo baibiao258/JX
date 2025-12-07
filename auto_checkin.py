@@ -411,7 +411,6 @@ async def main():
         
         logger.error(f"========== {checkin_type}打卡失败！ ==========")
         send_notification(wxpusher_app_token, wxpusher_uid, title, message)
-        sys.exit(1)
 
 
 if __name__ == "__main__":

@@ -447,7 +447,6 @@ async def main():
         
         logger.error(f"========== 日报未完成！ ==========")
         send_notification(wxpusher_app_token, wxpusher_uid, title, message)
-        sys.exit(1)
 
 
 if __name__ == "__main__":
