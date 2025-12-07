@@ -53,5 +53,8 @@ COPY auto_daily_report.py .
 COPY entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
-# 默认运行启动脚本
-CMD ["/app/entrypoint.sh"]
+# 复制定时调度器
+COPY scheduler.py .
+
+# 默认运行定时调度器
+CMD ["python", "scheduler.py"]
