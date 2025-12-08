@@ -46,17 +46,22 @@ async def run_daily_report():
 def schedule_jobs():
     """配置定时任务"""
     
-    # 上班打卡：每天 07:00
-    schedule.every().day.at("07:00").do(lambda: asyncio.run(run_checkin()))
-    logger.info("✓ 已配置上班打卡：每天 07:00")
+    # 注意：schedule 库使用系统本地时间
+    # 北京时间 07:00 = UTC 23:00 (前一天)
+    # 北京时间 17:00 = UTC 09:00
+    # 北京时间 17:40 = UTC 09:40
     
-    # 下班打卡：每天 17:00
-    schedule.every().day.at("17:00").do(lambda: asyncio.run(run_checkin()))
-    logger.info("✓ 已配置下班打卡：每天 17:00")
+    # 上班打卡：北京时间 07:00 = UTC 23:00 (前一天)
+    schedule.every().day.at("23:00").do(lambda: asyncio.run(run_checkin()))
+    logger.info("✓ 已配置上班打卡：北京时间每天 07:00 (UTC 23:00)")
     
-    # 日报提交：每天 17:40
-    schedule.every().day.at("17:40").do(lambda: asyncio.run(run_daily_report()))
-    logger.info("✓ 已配置日报提交：每天 17:40")
+    # 下班打卡：北京时间 17:00 = UTC 09:00
+    schedule.every().day.at("09:00").do(lambda: asyncio.run(run_checkin()))
+    logger.info("✓ 已配置下班打卡：北京时间每天 17:00 (UTC 09:00)")
+    
+    # 日报提交：北京时间 17:40 = UTC 09:40
+    schedule.every().day.at("09:40").do(lambda: asyncio.run(run_daily_report()))
+    logger.info("✓ 已配置日报提交：北京时间每天 17:40 (UTC 09:40)")
 
 
 async def main():
