@@ -48,5 +48,8 @@ RUN playwright install chromium && playwright install-deps chromium
 # 复制应用代码
 COPY . .
 
-# 默认运行定时调度器
-CMD ["python", "scheduler.py"]
+# 确保入口脚本可执行
+RUN chmod +x /app/entrypoint.sh
+
+# 默认运行定时调度器（可被外部 command 覆盖）
+ENTRYPOINT ["/bin/bash", "/app/entrypoint.sh"]

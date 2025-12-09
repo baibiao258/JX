@@ -275,9 +275,13 @@ class AutoDailyReport:
         try:
             playwright = await async_playwright().start()
 
-            self.browser = await playwright.chromium.launch(
-                headless=self.headless, args=["--no-sandbox", "--disable-setuid-sandbox"]
-            )
+            launch_args = [
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",  # 避免 /dev/shm 太小导致崩溃
+            ]
+
+            self.browser = await playwright.chromium.launch(headless=self.headless, args=launch_args)
 
             context = await self.browser.new_context(
                 viewport={"width": 1280, "height": 720},
