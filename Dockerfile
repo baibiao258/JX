@@ -46,15 +46,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN playwright install chromium && playwright install-deps chromium
 
 # 复制应用代码
-COPY auto_checkin.py .
-COPY auto_daily_report.py .
-
-# 复制启动脚本
-COPY entrypoint.sh /app/entrypoint.sh
-RUN chmod +x /app/entrypoint.sh
-
-# 复制定时调度器
-COPY scheduler.py .
+COPY . .
 
 # 默认运行定时调度器
 CMD ["python", "scheduler.py"]
