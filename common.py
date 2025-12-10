@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""共享工具：时区、日志、验证码识别、统一登录重试。"""
+"""Shared utilities: timezone, logging, captcha solving, login retry, notifications."""
 
 import asyncio
 import base64
@@ -9,12 +9,12 @@ import time
 from datetime import timezone, timedelta
 from typing import Optional, Callable, Awaitable, Tuple
 
-# 统一使用北京时区
+# Use Beijing timezone
 BEIJING_TZ = timezone(timedelta(hours=8))
 
 
 def get_logger(name: str = __name__) -> logging.Logger:
-    """初始化并返回同一日志格式的 logger。"""
+    """Initialize and return a logger."""
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s - %(levelname)s - %(message)s",
@@ -24,26 +24,26 @@ def get_logger(name: str = __name__) -> logging.Logger:
 
 
 async def solve_captcha(page, ocr, logger: logging.Logger, max_attempts: int = 3) -> str:
-    """通用验证码识别，优先截图，回退 base64，过滤出 4 位数字。"""
+    """Generic captcha solver: screenshot -> OCR -> keep 4 digits."""
     try:
         await page.wait_for_selector("div.captcha-image img", timeout=15000)
     except Exception:
-        logger.error("未找到验证码图片")
+        logger.error("captcha image not found")
         return ""
 
     for attempt in range(max_attempts):
         captcha_img = await page.query_selector("div.captcha-image img")
         if not captcha_img:
-            logger.error("验证码图片元素缺失")
+            logger.error("captcha image element missing")
             return ""
 
         try:
             img_data = await captcha_img.screenshot(type="png")
         except Exception as e:
-            logger.warning(f"页面截图识别验证码失败，使用 base64 数据替代: {e}")
+            logger.warning(f"screenshot captcha failed, fallback base64: {e}")
             src = await captcha_img.get_attribute("src")
             if not src or not src.startswith("data:image"):
-                logger.error("验证码图片格式不正确")
+                logger.error("captcha image format invalid")
                 return ""
             base64_data = src.split(",")[1]
             img_data = base64.b64decode(base64_data)
@@ -52,22 +52,22 @@ async def solve_captcha(page, ocr, logger: logging.Logger, max_attempts: int = 3
             raw_text = ocr.classification(img_data)
             captcha_text = "".join(ch for ch in raw_text if ch.isdigit())
             if len(captcha_text) == 4:
-                logger.info(f"验证码识别结果 {captcha_text}")
+                logger.info(f"captcha result: {captcha_text}")
                 return captcha_text
 
             logger.warning(
-                f"验证码识别结果无效，原始: {raw_text}，过滤后: {captcha_text}，尝试刷新验证码 (第{attempt + 1}次)"
+                f"captcha invalid. raw: {raw_text}, filtered: {captcha_text}, refreshing (attempt {attempt + 1})"
             )
             try:
                 await captcha_img.click()
                 await asyncio.sleep(0.6)
             except Exception as e:
-                logger.warning(f"刷新验证码失败: {e}")
+                logger.warning(f"refresh captcha failed: {e}")
         else:
-            logger.warning("OCR 不可用，无法自动识别验证码")
+            logger.warning("OCR unavailable, cannot solve captcha automatically")
             return ""
 
-    logger.error("多次刷新后仍未获得有效验证码")
+    logger.error("captcha attempts exceeded")
     return ""
 
 
@@ -81,7 +81,7 @@ async def login_with_retry(
     max_attempts: int = 10,
     total_timeout: int = 300,
 ) -> bool:
-    """通用登录：带总超时与重试，失败时刷新页面。"""
+    """Generic login with total timeout and retries."""
     start_ts = time.monotonic()
     attempt = 0
 
@@ -89,12 +89,12 @@ async def login_with_retry(
         await page.goto(login_url, wait_until="networkidle", timeout=60000)
         await asyncio.sleep(2)
     except Exception as e:
-        logger.error(f"打开登录页失败: {e}")
+        logger.error(f"open login page failed: {e}")
         return False
 
     while attempt < max_attempts and (time.monotonic() - start_ts) < total_timeout:
         attempt += 1
-        logger.info(f"登录尝试 {attempt}/{max_attempts}")
+        logger.info(f"login attempt {attempt}/{max_attempts}")
         try:
             await page.wait_for_selector('input[type="text"][placeholder="请输入用户名"]', timeout=30000)
             await page.fill('input[type="text"][placeholder="请输入用户名"]', username)
@@ -108,7 +108,7 @@ async def login_with_retry(
 
             await page.fill('input[type="text"][placeholder="请输入验证码"]', captcha_text)
 
-            login_button = await page.query_selector('button:has-text("登录"), button:has-text("登录"), .login-btn, .submit-btn')
+            login_button = await page.query_selector('button:has-text("登录"), .login-btn, .submit-btn')
             if login_button:
                 await login_button.click()
             else:
@@ -128,16 +128,16 @@ async def login_with_retry(
                 pass
 
             if page.url != login_url:
-                logger.info(f"登录成功，当前页: {page.url}")
+                logger.info(f"login success, current page: {page.url}")
                 return True
 
-            logger.warning("登录可能失败，准备重试...")
+            logger.warning("login may have failed, retrying...")
             await asyncio.sleep(2)
         except Exception as e:
-            logger.error(f"登录流程出错: {e}")
+            logger.error(f"login flow error: {e}")
             await asyncio.sleep(2)
 
-    logger.error("登录超时或超过最大重试次数")
+    logger.error("login timeout or retries exceeded")
     return False
 
 
@@ -149,19 +149,19 @@ async def send_wxpush(
     max_retries: int = 3,
     timeout: int = 10,
 ) -> None:
-    """WXPush ???Cloudflare Worker?????????"""
+    """WXPush (Cloudflare Worker) notification. Skips if not configured."""
     base_url = (os.getenv("WXPUSH_URL") or "").rstrip("/")
     token = os.getenv("WXPUSH_TOKEN") or ""
     userid = os.getenv("WXPUSH_USERID") or ""
 
     if not base_url or not token:
-        logger.info("??? WXPush?????")
+        logger.info("WXPush not configured, skip")
         return
 
     url = f"{base_url}/wxsend"
     payload = {"title": title, "content": message}
     if userid:
-        payload["userid"] = userid  # ?? Worker ?????
+        payload["userid"] = userid  # Override default recipients
 
     headers = {"Authorization": token, "Content-Type": "application/json"}
 
@@ -170,15 +170,14 @@ async def send_wxpush(
             resp = request_client.post(url, json=payload, headers=headers, timeout=timeout)
             text = resp.text
             if resp.ok:
-                logger.info(f"WXPush ???????{resp.status_code} {text}")
+                logger.info(f"WXPush sent: {resp.status_code} {text}")
                 return
-            logger.warning(f"WXPush ??????{attempt}??: {resp.status_code} {text}")
+            logger.warning(f"WXPush failed (attempt {attempt}): {resp.status_code} {text}")
         except Exception as e:
-            logger.warning(f"WXPush ??????{attempt}??: {e}")
+            logger.warning(f"WXPush error (attempt {attempt}): {e}")
         await asyncio.sleep(2 * attempt)
 
-    logger.error("WXPush ??????????")
-
+    logger.error("WXPush failed after retries")
 
 
 async def send_wxpusher(
@@ -191,17 +190,15 @@ async def send_wxpusher(
     max_retries: int = 3,
     timeout: int = 10,
 ) -> None:
-    """WxPusher ??????request_client ??? requests ???"""
+    """WxPusher notification with retries. request_client must be requests-compatible."""
     if not app_token or not uid:
-        logger.warning("??? WxPusher?????")
+        logger.warning("WxPusher not configured, skip")
         return
 
     url = "https://wxpusher.zjiecode.com/api/send/message"
     data = {
         "appToken": app_token,
-        "content": f"# {title}
-
-{message}",
+        "content": f"# {title}\n\n{message}",
         "summary": title,
         "contentType": 3,
         "uids": [uid],
@@ -213,14 +210,14 @@ async def send_wxpusher(
             resp = request_client.post(url, json=data, timeout=timeout)
             result = resp.json()
             if result.get("code") == 1000:
-                logger.info("WxPusher ??????")
+                logger.info("WxPusher sent")
                 return
-            logger.warning(f"WxPusher ??????{attempt}??: {result.get('msg')}")
+            logger.warning(f"WxPusher failed (attempt {attempt}): {result.get('msg')}")
         except Exception as e:
-            logger.warning(f"????????{attempt}??: {e}")
+            logger.warning(f"WxPusher error (attempt {attempt}): {e}")
         await asyncio.sleep(2 * attempt)
 
-    logger.error("WxPusher ??????????")
+    logger.error("WxPusher failed after retries")
 
 
 async def run_with_retries(
@@ -231,29 +228,28 @@ async def run_with_retries(
     delay_seconds: int = 60,
     backoff_factor: float = 1.0,
 ) -> Tuple[bool, int]:
-    """带自动重试的通用任务实现，返回成功与实际尝试次数。"""
+    """Generic retry wrapper; returns success flag and attempts used."""
     attempts = max(1, max_attempts)
     for attempt in range(1, attempts + 1):
         start_ts = time.monotonic()
         try:
             success = await task_coro_factory()
         except Exception as exc:
-            logger.error(f"{action_name} 第 {attempt} 次尝试出错: {exc}")
+            logger.error(f"{action_name} attempt {attempt} raised: {exc}")
             success = False
 
         if success:
             elapsed = time.monotonic() - start_ts
             if attempt > 1:
-                logger.info(f"{action_name} 在第 {attempt} 次尝试成功，耗时 {elapsed:.1f} 秒")
+                logger.info(f"{action_name} succeeded on attempt {attempt}, elapsed {elapsed:.1f}s")
             return True, attempt
 
         if attempt >= attempts:
             break
 
         wait_seconds = max(1, int(delay_seconds * (backoff_factor ** (attempt - 1))))
-        logger.warning(f"{action_name} 第 {attempt}/{attempts} 次失败，{wait_seconds} 秒后重试")
+        logger.warning(f"{action_name} attempt {attempt}/{attempts} failed, retry in {wait_seconds}s")
         await asyncio.sleep(wait_seconds)
 
-    logger.error(f"{action_name} 连续 {attempts} 次失败，停止重试")
+    logger.error(f"{action_name} failed after {attempts} attempts, stop retrying")
     return False, attempts
-
