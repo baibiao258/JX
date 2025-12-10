@@ -13,7 +13,7 @@ import logging
 import requests
 from typing import Optional
 
-from common import BEIJING_TZ, get_logger, login_with_retry, send_wxpusher
+from common import BEIJING_TZ, get_logger, login_with_retry, run_with_retries, send_wxpusher
 
 logger = get_logger(__name__)
 
@@ -28,6 +28,24 @@ except ImportError:
 except Exception as e:
     ocr = None
     logger.warning(f"ddddocr 初始化失败: {e}")
+
+
+def _get_int_env(var_name: str, default: int) -> int:
+    """读取整数环境变量，非法时使用默认值。"""
+    try:
+        return int(os.getenv(var_name, str(default)))
+    except Exception:
+        logger.warning(f"环境变量 {var_name} 非法，使用默认值 {default}")
+        return default
+
+
+def _get_float_env(var_name: str, default: float) -> float:
+    """读取浮点环境变量，非法时使用默认值。"""
+    try:
+        return float(os.getenv(var_name, str(default)))
+    except Exception:
+        logger.warning(f"环境变量 {var_name} 非法，使用默认值 {default}")
+        return default
 
 
 class AutoCheckin:
@@ -248,8 +266,29 @@ async def main():
         logger.warning(f"当前时间 {current_hour}:00 不在打卡时间段内，跳过打卡")
         return
 
-    checkin = AutoCheckin(username=username, password=password, headless=True)
-    success = await checkin.run()
+    max_retry_attempts = _get_int_env("CHECKIN_RETRY_ATTEMPTS", 3)
+    retry_delay_seconds = _get_int_env("CHECKIN_RETRY_DELAY", 90)
+    retry_backoff = _get_float_env("CHECKIN_RETRY_BACKOFF", 1.5)
+
+    logger.info(
+        f"打卡重试配置: 最多 {max_retry_attempts} 次，初始间隔 {retry_delay_seconds}s，回退系数 {retry_backoff}"
+    )
+
+    checkin: Optional[AutoCheckin] = None
+
+    async def attempt_checkin():
+        nonlocal checkin
+        checkin = AutoCheckin(username=username, password=password, headless=True)
+        return await checkin.run()
+
+    success, used_attempts = await run_with_retries(
+        action_name=f"{checkin_type}打卡",
+        task_coro_factory=attempt_checkin,
+        logger=logger,
+        max_attempts=max_retry_attempts,
+        delay_seconds=retry_delay_seconds,
+        backoff_factor=retry_backoff,
+    )
 
     finish_time = datetime.now(BEIJING_TZ)
     date_str = finish_time.strftime("%Y年%m月%d日")
@@ -262,6 +301,7 @@ async def main():
 日期: {date_str}
 时间: {time_str} (北京时间)
 用户: {username}
+重试: 第 {used_attempts} 次尝试成功（最多 {max_retry_attempts} 次）
 状态: 打卡成功"""
 
         logger.info(f"========== {checkin_type}打卡成功 ==========")
@@ -273,6 +313,7 @@ async def main():
 日期: {date_str}
 时间: {time_str} (北京时间)
 用户: {username}
+重试: 已尝试 {max_retry_attempts} 次（全部失败）
 状态: 打卡失败"""
 
         logger.error(f"========== {checkin_type}打卡失败 ==========")

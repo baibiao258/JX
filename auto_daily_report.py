@@ -14,7 +14,7 @@ import logging
 import requests
 from typing import Optional
 
-from common import BEIJING_TZ, get_logger, login_with_retry, send_wxpusher
+from common import BEIJING_TZ, get_logger, login_with_retry, run_with_retries, send_wxpusher
 
 logger = get_logger(__name__)
 
@@ -29,6 +29,24 @@ except ImportError:
 except Exception as e:
     ocr = None
     logger.warning(f"ddddocr 初始化失败: {e}")
+
+
+def _get_int_env(var_name: str, default: int) -> int:
+    """读取整数环境变量，非法时使用默认值。"""
+    try:
+        return int(os.getenv(var_name, str(default)))
+    except Exception:
+        logger.warning(f"环境变量 {var_name} 非法，使用默认值 {default}")
+        return default
+
+
+def _get_float_env(var_name: str, default: float) -> float:
+    """读取浮点环境变量，非法时使用默认值。"""
+    try:
+        return float(os.getenv(var_name, str(default)))
+    except Exception:
+        logger.warning(f"环境变量 {var_name} 非法，使用默认值 {default}")
+        return default
 
 
 class AutoDailyReport:
@@ -339,8 +357,29 @@ async def main():
     logger.info(f"时间: {now_beijing.strftime('%Y-%m-%d %H:%M:%S')} (北京时间)")
     logger.info(f"用户: {username}")
 
-    report = AutoDailyReport(username=username, password=password, headless=True)
-    success = await report.run()
+    max_retry_attempts = _get_int_env("DAILY_REPORT_RETRY_ATTEMPTS", 3)
+    retry_delay_seconds = _get_int_env("DAILY_REPORT_RETRY_DELAY", 90)
+    retry_backoff = _get_float_env("DAILY_REPORT_RETRY_BACKOFF", 1.5)
+
+    logger.info(
+        f"日报重试配置: 最多 {max_retry_attempts} 次，初始间隔 {retry_delay_seconds}s，回退系数 {retry_backoff}"
+    )
+
+    report: Optional[AutoDailyReport] = None
+
+    async def attempt_daily_report():
+        nonlocal report
+        report = AutoDailyReport(username=username, password=password, headless=True)
+        return await report.run()
+
+    success, used_attempts = await run_with_retries(
+        action_name="日报提交",
+        task_coro_factory=attempt_daily_report,
+        logger=logger,
+        max_attempts=max_retry_attempts,
+        delay_seconds=retry_delay_seconds,
+        backoff_factor=retry_backoff,
+    )
 
     finish_time = datetime.now(BEIJING_TZ)
     date_str = finish_time.strftime("%Y年%m月%d日")
@@ -354,6 +393,7 @@ async def main():
 日期: {date_str}
 时间: {time_str} (北京时间)
 用户: {username}
+重试: 第 {used_attempts} 次尝试成功（最多 {max_retry_attempts} 次）
 状态: 日报已完成"""
         else:
             title = "日报完成"
@@ -362,6 +402,7 @@ async def main():
 日期: {date_str}
 时间: {time_str} (北京时间)
 用户: {username}
+重试: 第 {used_attempts} 次尝试成功（最多 {max_retry_attempts} 次）
 状态: 日报已成功提交"""
 
         logger.info("========== 日报完成 ==========")
@@ -373,6 +414,7 @@ async def main():
 日期: {date_str}
 时间: {time_str} (北京时间)
 用户: {username}
+重试: 已尝试 {max_retry_attempts} 次（全部失败）
 状态: 日报提交失败"""
 
         logger.error("========== 日报未完成 ==========")

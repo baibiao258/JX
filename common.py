@@ -6,7 +6,7 @@ import base64
 import logging
 import time
 from datetime import timezone, timedelta
-from typing import Optional
+from typing import Optional, Callable, Awaitable, Tuple
 
 # 统一使用北京时区
 BEIJING_TZ = timezone(timedelta(hours=8))
@@ -178,4 +178,39 @@ async def send_wxpusher(
         await asyncio.sleep(2 * attempt)
 
     logger.error("WxPusher 通知多次重试后仍失败")
+
+
+async def run_with_retries(
+    action_name: str,
+    task_coro_factory: Callable[[], Awaitable[bool]],
+    logger: logging.Logger,
+    max_attempts: int = 3,
+    delay_seconds: int = 60,
+    backoff_factor: float = 1.0,
+) -> Tuple[bool, int]:
+    """带自动重试的通用任务实现，返回成功与实际尝试次数。"""
+    attempts = max(1, max_attempts)
+    for attempt in range(1, attempts + 1):
+        start_ts = time.monotonic()
+        try:
+            success = await task_coro_factory()
+        except Exception as exc:
+            logger.error(f"{action_name} 第 {attempt} 次尝试出错: {exc}")
+            success = False
+
+        if success:
+            elapsed = time.monotonic() - start_ts
+            if attempt > 1:
+                logger.info(f"{action_name} 在第 {attempt} 次尝试成功，耗时 {elapsed:.1f} 秒")
+            return True, attempt
+
+        if attempt >= attempts:
+            break
+
+        wait_seconds = max(1, int(delay_seconds * (backoff_factor ** (attempt - 1))))
+        logger.warning(f"{action_name} 第 {attempt}/{attempts} 次失败，{wait_seconds} 秒后重试")
+        await asyncio.sleep(wait_seconds)
+
+    logger.error(f"{action_name} 连续 {attempts} 次失败，停止重试")
+    return False, attempts
 
