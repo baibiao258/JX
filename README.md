@@ -20,8 +20,16 @@
 |--------|------|------|
 | CHECKIN_USERNAME | ✅ | 登录用户名 |
 | CHECKIN_PASSWORD | ✅ | 登录密码 |
-| WXPUSHER_APP_TOKEN | ❌ | WxPusher 通知 Token |
-| WXPUSHER_UID | ❌ | WxPusher 用户 UID |
+| WXPUSH_TOKEN | ❌ | WXPush 通知 Token |
+| WXPUSH_USERID | ❌ | WXPush 用户 UID |
+| WXPUSH_URL | ???| WXPush Worker ??????????????? `https://xxx.workers.dev` |
+
+?????WxPusher??
+
+| ??? | ?? | ?? |
+|--------|------|------|
+| WXPUSHER_APP_TOKEN | ? | WxPusher ?? Token |
+| WXPUSHER_UID | ? | WxPusher ?? UID |
 
 可选重试配置（失败自动重试）:
 

@@ -14,7 +14,7 @@ import logging
 import requests
 from typing import Optional
 
-from common import BEIJING_TZ, get_logger, login_with_retry, run_with_retries, send_wxpusher
+from common import BEIJING_TZ, get_logger, login_with_retry, run_with_retries, send_wxpush, send_wxpusher
 
 logger = get_logger(__name__)
 
@@ -342,6 +342,7 @@ async def main():
     password = os.getenv("CHECKIN_PASSWORD", "")
     wxpusher_app_token = os.getenv("WXPUSHER_APP_TOKEN", "")
     wxpusher_uid = os.getenv("WXPUSHER_UID", "")
+    wxpush_enabled = bool(os.getenv("WXPUSH_URL") and os.getenv("WXPUSH_TOKEN"))
 
     if not username or not password:
         if len(sys.argv) >= 3:
@@ -360,6 +361,20 @@ async def main():
     max_retry_attempts = _get_int_env("DAILY_REPORT_RETRY_ATTEMPTS", 3)
     retry_delay_seconds = _get_int_env("DAILY_REPORT_RETRY_DELAY", 90)
     retry_backoff = _get_float_env("DAILY_REPORT_RETRY_BACKOFF", 1.5)
+
+    notify_methods = []
+    if wxpush_enabled:
+        notify_methods.append("WXPush")
+    if wxpusher_app_token and wxpusher_uid:
+        notify_methods.append("WxPusher")
+    if notify_methods:
+        logger.info(f"通知: 已配置 {', '.join(notify_methods)}")
+
+    async def send_notifications(title: str, message: str):
+        if wxpush_enabled:
+            await send_wxpush(title, message, logger, requests)
+        if wxpusher_app_token and wxpusher_uid:
+            await send_wxpusher(wxpusher_app_token, wxpusher_uid, title, message, logger, requests)
 
     logger.info(
         f"日报重试配置: 最多 {max_retry_attempts} 次，初始间隔 {retry_delay_seconds}s，回退系数 {retry_backoff}"
@@ -406,7 +421,7 @@ async def main():
 状态: 日报已成功提交"""
 
         logger.info("========== 日报完成 ==========")
-        await send_wxpusher(wxpusher_app_token, wxpusher_uid, title, message, logger, requests)
+        await send_notifications(title, message)
     else:
         title = "日报未完成"
         message = f"""日报提交失败。
@@ -418,7 +433,7 @@ async def main():
 状态: 日报提交失败"""
 
         logger.error("========== 日报未完成 ==========")
-        await send_wxpusher(wxpusher_app_token, wxpusher_uid, title, message, logger, requests)
+        await send_notifications(title, message)
 
 
 if __name__ == "__main__":

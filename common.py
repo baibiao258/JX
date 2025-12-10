@@ -4,6 +4,7 @@
 import asyncio
 import base64
 import logging
+import os
 import time
 from datetime import timezone, timedelta
 from typing import Optional, Callable, Awaitable, Tuple
@@ -140,6 +141,46 @@ async def login_with_retry(
     return False
 
 
+async def send_wxpush(
+    title: str,
+    message: str,
+    logger: logging.Logger,
+    request_client,
+    max_retries: int = 3,
+    timeout: int = 10,
+) -> None:
+    """WXPush ???Cloudflare Worker?????????"""
+    base_url = (os.getenv("WXPUSH_URL") or "").rstrip("/")
+    token = os.getenv("WXPUSH_TOKEN") or ""
+    userid = os.getenv("WXPUSH_USERID") or ""
+
+    if not base_url or not token:
+        logger.info("??? WXPush?????")
+        return
+
+    url = f"{base_url}/wxsend"
+    payload = {"title": title, "content": message}
+    if userid:
+        payload["userid"] = userid  # ?? Worker ?????
+
+    headers = {"Authorization": token, "Content-Type": "application/json"}
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            resp = request_client.post(url, json=payload, headers=headers, timeout=timeout)
+            text = resp.text
+            if resp.ok:
+                logger.info(f"WXPush ???????{resp.status_code} {text}")
+                return
+            logger.warning(f"WXPush ??????{attempt}??: {resp.status_code} {text}")
+        except Exception as e:
+            logger.warning(f"WXPush ??????{attempt}??: {e}")
+        await asyncio.sleep(2 * attempt)
+
+    logger.error("WXPush ??????????")
+
+
+
 async def send_wxpusher(
     app_token: str,
     uid: str,
@@ -150,15 +191,17 @@ async def send_wxpusher(
     max_retries: int = 3,
     timeout: int = 10,
 ) -> None:
-    """WxPusher 通知带重试。request_client 需兼容 requests 接口。"""
+    """WxPusher ??????request_client ??? requests ???"""
     if not app_token or not uid:
-        logger.warning("未配置 WxPusher，跳过通知")
+        logger.warning("??? WxPusher?????")
         return
 
     url = "https://wxpusher.zjiecode.com/api/send/message"
     data = {
         "appToken": app_token,
-        "content": f"# {title}\n\n{message}",
+        "content": f"# {title}
+
+{message}",
         "summary": title,
         "contentType": 3,
         "uids": [uid],
@@ -170,14 +213,14 @@ async def send_wxpusher(
             resp = request_client.post(url, json=data, timeout=timeout)
             result = resp.json()
             if result.get("code") == 1000:
-                logger.info("WxPusher 通知发送成功")
+                logger.info("WxPusher ??????")
                 return
-            logger.warning(f"WxPusher 通知失败（第{attempt}次）: {result.get('msg')}")
+            logger.warning(f"WxPusher ??????{attempt}??: {result.get('msg')}")
         except Exception as e:
-            logger.warning(f"发送通知出错（第{attempt}次）: {e}")
+            logger.warning(f"????????{attempt}??: {e}")
         await asyncio.sleep(2 * attempt)
 
-    logger.error("WxPusher 通知多次重试后仍失败")
+    logger.error("WxPusher ??????????")
 
 
 async def run_with_retries(
